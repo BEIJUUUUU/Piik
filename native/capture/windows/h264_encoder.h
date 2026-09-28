@@ -68,11 +68,12 @@ struct VideoProfile final {
   }
   std::string profile_level_id() const {
     // spike: Main profile (profile_idc 0x4d) instead of Constrained Baseline
-    // (0x42). Constraint flags stay 0x00, the canonical plain-Main signature;
-    // the fixture prints the encoder's actual bytes so this can be replaced
-    // with the exact value the MFT emits before this reaches the product path.
+    // (0x42). The fixture measured `4d401f` from the RTX 3080 NVIDIA MFT:
+    // constraint_set1_flag (0x40) is set, level 3.1 (0x1f). The product path
+    // compares this string exactly, so the literal must reproduce the
+    // adapter's emitted bytes.
     std::ostringstream output;
-    output << "4d00" << std::hex << std::setfill('0') << std::setw(2)
+    output << "4d40" << std::hex << std::setfill('0') << std::setw(2)
            << h264_level();
     return output.str();
   }
