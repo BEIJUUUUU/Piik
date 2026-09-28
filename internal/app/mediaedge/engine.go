@@ -23,7 +23,11 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-const H264ProfileLevelID = "42c033"
+// spike: advertise the profile the Windows native capture now emits. Pion's
+// H264 fmtp Match compares only the profile_idc and constraint bytes and
+// ignores the level (RFC 6184 8.2.2), so one value covers the whole level
+// ladder while keeping the advertisement honest about the in-band SPS.
+const H264ProfileLevelID = "4d4033"
 const stunSurveyTimeout = 5 * time.Second
 
 var h264Capability = webrtc.RTPCodecCapability{

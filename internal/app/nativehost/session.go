@@ -1178,7 +1178,12 @@ func (state CaptureState) applyBackend(options *nativecapture.VideoOptions) {
 
 func validH264ProfileLevelID(value string) bool {
 	switch value {
-	case "42c01e", "42c01f", "42c020", "42c028", "42c029", "42c02a", "42c032", "42c033":
+	case "42c01e", "42c01f", "42c020", "42c028", "42c029", "42c02a", "42c032", "42c033",
+		// spike: Main profile (profile_idc 0x4d, constraint_set1_flag 0x40).
+		// These are the levels VideoProfile::h264_level() can return on
+		// Windows; the RTX 3080 NVIDIA MFT emitted 4d401f/4d4028/4d402a/4d4033.
+		// Linux capture still matches 0x42c0 exactly, so it keeps Baseline.
+		"4d401f", "4d4028", "4d402a", "4d4032", "4d4033":
 		return true
 	default:
 		return false
