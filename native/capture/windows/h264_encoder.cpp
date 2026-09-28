@@ -340,7 +340,7 @@ ComPtr<IMFMediaType> CreateOutputType(
   Check(type->SetUINT32(MF_MT_INTERLACE_MODE,
                         MFVideoInterlace_Progressive),
         "output-type-interlace");
-  Check(type->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base),
+  Check(type->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Main),
         "output-type-profile");
   Check(type->SetUINT32(MF_MT_MPEG2_LEVEL, profile.h264_level()),
         "output-type-level");
@@ -393,7 +393,7 @@ void ValidateMediaTypes(
   RequireTypeU32(output.Get(), MF_MT_AVG_BITRATE, profile.bit_rate,
                  "output-type-bitrate");
   RequireTypeU32(output.Get(), MF_MT_MPEG2_PROFILE,
-                 eAVEncH264VProfile_Base, "output-type-profile");
+                 eAVEncH264VProfile_Main, "output-type-profile");
   RequireTypeU32(output.Get(), MF_MT_MPEG2_LEVEL, profile.h264_level(),
                  "output-type-level");
 
@@ -678,7 +678,11 @@ EncodedAccessUnit LiveEncoder::Encode(
     }
     if (nal.profile_level_id) {
       if (*nal.profile_level_id != profile_.profile_level_id()) {
-        Fail("bitstream-profile", "hardware MFT changed the requested H.264 profile level");
+        // spike: report both sides so a mismatching constraint byte is
+        // visible instead of only the stage name.
+        Fail("bitstream-profile",
+             "hardware MFT changed the requested H.264 profile level: requested " +
+                 profile_.profile_level_id() + ", emitted " + *nal.profile_level_id);
       }
       if (profile_level_id_ && *profile_level_id_ != *nal.profile_level_id) {
         Fail("bitstream-profile-change", "hardware MFT changed SPS profile");

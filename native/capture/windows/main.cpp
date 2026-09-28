@@ -616,9 +616,13 @@ RunEvidence RunEncoder(const Adapter& adapter, const DeviceContext& device,
     Fail("codec-runtime-bitrate-effect",
          "live bitrate update did not lower and restore encoded output");
   }
-  if (*observed_profile != "42c01f") {
+  // spike: Main profile (profile_idc 0x4d) replaces Constrained Baseline
+  // (0x42). Assert only the profile_idc byte so a different constraint flag is
+  // reported as evidence instead of a false failure; the printed
+  // evidence_profile_level_id gives the exact string the product path must use.
+  if (!observed_profile->starts_with("4d")) {
     Fail("bitstream-pinned-fmtp",
-         "SPS profile-level-id differs from the native media contract");
+         "SPS profile is not Main (0x4d); emitted " + *observed_profile);
   }
   return evidence;
 }

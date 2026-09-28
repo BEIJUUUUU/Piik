@@ -67,8 +67,12 @@ struct VideoProfile final {
     return 51;
   }
   std::string profile_level_id() const {
+    // spike: Main profile (profile_idc 0x4d) instead of Constrained Baseline
+    // (0x42). Constraint flags stay 0x00, the canonical plain-Main signature;
+    // the fixture prints the encoder's actual bytes so this can be replaced
+    // with the exact value the MFT emits before this reaches the product path.
     std::ostringstream output;
-    output << "42c0" << std::hex << std::setfill('0') << std::setw(2)
+    output << "4d00" << std::hex << std::setfill('0') << std::setw(2)
            << h264_level();
     return output.str();
   }
