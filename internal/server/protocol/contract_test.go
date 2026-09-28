@@ -224,7 +224,7 @@ func TestAuthenticatedRoomRevision(t *testing.T) {
 		object(drop(authenticatedHost(), "mediaMode")), false)
 	assertServerMessage(t, "quality settings past the bitrate ceiling",
 		object(with(authenticatedHost(), member{"qualitySettings",
-			`{"resolution":"1080p","maxFramerate":60,"maxBitrate":20000000,` +
+			`{"resolution":"1080p","maxFramerate":60,"maxBitrate":50000001,` +
 				`"degradationPreference":"maintain-resolution"}`})), false)
 }
 

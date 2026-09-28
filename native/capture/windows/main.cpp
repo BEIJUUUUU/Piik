@@ -958,7 +958,7 @@ void ValidateVideoProfile(const VideoProfile& profile) {
       (profile.width == 1920 && profile.height == 1080) ||
       (profile.width == 2560 && profile.height == 1440);
   if (!valid_resolution || profile.frame_rate < 15 || profile.frame_rate > 60 ||
-      profile.bit_rate < 2'000'000 || profile.bit_rate > 12'000'000) {
+      profile.bit_rate < 2'000'000 || profile.bit_rate > 50'000'000) {
     Fail("argument-profile", "video profile is outside the product bounds");
   }
 }
@@ -973,7 +973,7 @@ void ParseOutputProfiles(ProductArguments& arguments, int first, int count, wcha
     output.bit_rate = ParseIndex(values[index + 4], "argument-output-bitrate");
     if (output.width < 2 || output.height < 2 || (output.width & 1) || (output.height & 1) ||
         output.width > 2560 || output.height > 1440 || output.frame_rate == 0 ||
-        output.frame_rate > 60 || output.bit_rate < 1'000 || output.bit_rate > 12'000'000) {
+        output.frame_rate > 60 || output.bit_rate < 1'000 || output.bit_rate > 50'000'000) {
       Fail("argument-output", "output profile exceeds codec bounds");
     }
     if (arguments.mode == ProductArguments::Mode::video &&

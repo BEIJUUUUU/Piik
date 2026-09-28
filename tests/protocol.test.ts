@@ -725,7 +725,7 @@ describe("client signaling protocol", () => {
       { ...qualitySettings, maxFramerate: 61 },
       { ...qualitySettings, maxFramerate: 30.5 },
       { ...qualitySettings, maxBitrate: 1_999_999 },
-      { ...qualitySettings, maxBitrate: 12_000_001 },
+      { ...qualitySettings, maxBitrate: 50_000_001 },
       { ...qualitySettings, maxBitrate: 5_000_000.5 },
       { ...qualitySettings, degradationPreference: "automatic" },
       legacyCodecQualitySettings,
@@ -1474,7 +1474,7 @@ describe("server signaling protocol", () => {
     expect(
       serverMessageSchema.safeParse({
         ...peerAssisted,
-        qualitySettings: { ...qualitySettings, maxBitrate: 20_000_000 },
+        qualitySettings: { ...qualitySettings, maxBitrate: 50_000_001 },
       }).success,
     ).toBe(false);
     const missingMode = {

@@ -3709,8 +3709,8 @@ export function HostPage({
                       <input
                         type="range"
                         min={2000000}
-                        max={12000000}
-                        step={500000}
+                        max={50000000}
+                        step={1000000}
                         value={advancedQuality.maxBitrate}
                         disabled={phase === "starting" || switchingSource}
                         aria-label={t("host.advanced.bitrate")}

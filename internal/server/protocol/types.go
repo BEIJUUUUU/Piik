@@ -136,7 +136,7 @@ func (v *QualitySettings) UnmarshalJSON(data []byte) error {
 	if !inRangeInt(v.MaxFramerate, 15, 60) {
 		return errors.New("maxFramerate is out of range")
 	}
-	if !inRangeInt(v.MaxBitrate, 2_000_000, 12_000_000) {
+	if !inRangeInt(v.MaxBitrate, 2_000_000, 50_000_000) {
 		return errors.New("maxBitrate is out of range")
 	}
 	if !enumOf(v.DegradationPreference, degradationPreferences...) {

@@ -189,7 +189,7 @@ export const qualitySettingsSchema = z
   .object({
     resolution: qualityResolutionSchema,
     maxFramerate: z.number().int().min(15).max(60),
-    maxBitrate: z.number().int().min(2_000_000).max(12_000_000),
+    maxBitrate: z.number().int().min(2_000_000).max(50_000_000),
     degradationPreference: degradationPreferenceSchema,
     screenAudioQuality: screenAudioQualitySchema.optional(),
   })

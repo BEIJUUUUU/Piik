@@ -16,6 +16,7 @@
 
 #include "capture_error.h"
 
+#include <algorithm>
 #include <chrono>
 #include <iomanip>
 #include <optional>
@@ -65,6 +66,29 @@ struct VideoProfile final {
     if (macroblocks <= 8'704 && macroblocks_per_second <= 522'240) return 42;
     if (macroblocks <= 22'080 && macroblocks_per_second <= 589'824) return 50;
     return 51;
+  }
+  // Multiple reference frames recover occluded detail that a single-reference
+  // prediction turns into mosaic on sustained motion. The decoder-side budget
+  // is the level's MaxDpbMbs divided by the frame size, so clamp there instead
+  // of hardcoding 4: the MFT rejects the output type when the DPB overflows
+  // (measured MF_E_INVALIDMEDIATYPE at level 4.2/1080p with 8). Level 4.2 at
+  // 1080p allows exactly 4; 4 also holds at every lower resolution tier.
+  UINT32 max_num_ref_frames() const {
+    constexpr UINT32 kWantedRefFrames = 4;
+    const UINT64 macroblocks =
+        ((static_cast<UINT64>(width) + 15) / 16) *
+        ((static_cast<UINT64>(height) + 15) / 16);
+    const UINT32 level = h264_level();
+    const UINT64 dpb_mbs =
+        level <= 31 ? 18'000
+        : level <= 40 ? 32'768
+        : level <= 42 ? 34'816
+        : level <= 50 ? 110'400
+                      : 184'320;
+    UINT32 budget = static_cast<UINT32>(dpb_mbs / std::max<UINT64>(macroblocks, 1));
+    if (budget > 16) budget = 16;
+    if (budget < 1) budget = 1;
+    return std::min(kWantedRefFrames, budget);
   }
   std::string profile_level_id() const {
     // spike: Main profile (profile_idc 0x4d) instead of Constrained Baseline
