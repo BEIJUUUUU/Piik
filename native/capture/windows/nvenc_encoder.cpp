@@ -97,19 +97,25 @@ class NvencEncoder final : public VideoEncoder {
 
   void SetBitrate(UINT32 bitrate) override {
     if (encoder_ == nullptr || bitrate == profile_.bit_rate) return;
-    NV_ENC_RECONFIGURE_PARAMS reconfigure = {};
-    reconfigure.version = NV_ENC_RECONFIGURE_PARAMS_VER;
-    reconfigure.resetEncoder = 0;
-    reconfigure.forceIDR = 0;
-    reconfigure.reInitEncodeParams.version = NV_ENC_INITIALIZE_PARAMS_VER;
-    reconfigure.reInitEncodeParams.encodeConfig = &config_;
     config_.rcParams.averageBitRate = bitrate;
     config_.rcParams.maxBitRate = bitrate;
+    NV_ENC_RECONFIGURE_PARAMS reconfigure = {};
+    reconfigure.version = NV_ENC_RECONFIGURE_PARAMS_VER;
+    // A live bitrate change resets the rate-control state and emits an IDR so
+    // the decoder restarts from a known point. Reconfiguring in place instead
+    // (resetEncoder = 0) was measured to wedge the driver: output stops and the
+    // next calls never return. This mirrors ffmpeg's nvenc reconfig_encoder.
+    reconfigure.resetEncoder = 1;
+    reconfigure.forceIDR = 1;
     reconfigure.reInitEncodeParams = init_params_;
+    reconfigure.reInitEncodeParams.version = NV_ENC_INITIALIZE_PARAMS_VER;
     reconfigure.reInitEncodeParams.encodeConfig = &config_;
     if (api_.functions().nvEncReconfigureEncoder(encoder_, &reconfigure) ==
         NV_ENC_SUCCESS) {
       profile_.bit_rate = bitrate;
+      // forceIDR makes the next submitted picture an IDR, so it has to be
+      // reported as a key frame rather than as a delta.
+      key_frame_after_reconfigure_ = true;
     }
   }
 
@@ -128,6 +134,10 @@ class NvencEncoder final : public VideoEncoder {
     free_inputs_.erase(free_inputs_.begin());
     const uint32_t bitstream_slot = free_bitstreams_.front();
     free_bitstreams_.erase(free_bitstreams_.begin());
+    // A successful reconfigure already forced an IDR on this picture, so it has
+    // to be reported as a key frame rather than as a delta.
+    const bool key_frame = force_key_frame || key_frame_after_reconfigure_;
+    key_frame_after_reconfigure_ = false;
 
     // The capture pipeline hands over the selected NV12 surface on this device,
     // so a plain copy keeps the registered pool texture in the right format.
@@ -148,8 +158,12 @@ class NvencEncoder final : public VideoEncoder {
     picture.bufferFmt = NV_ENC_BUFFER_FORMAT_NV12;
     picture.inputTimeStamp = timestamp100ns;
     picture.outputBitstream = bitstreams_[bitstream_slot].bitstreamBuffer;
-    if (force_key_frame) {
-      picture.encodePicFlags |= NV_ENC_PIC_FLAG_FORCEIDR;
+    if (key_frame) {
+      // enablePTD is on, so the encoder picks picture types and FORCEIDR is the
+      // supported way to demand an IDR. OUTPUT_SPSPPS makes that IDR carry its
+      // own parameter sets even when the preset left repeatSPSPPS off.
+      picture.encodePicFlags |= NV_ENC_PIC_FLAG_FORCEIDR |
+                               NV_ENC_PIC_FLAG_OUTPUT_SPSPPS;
     }
 
     const NVENCSTATUS status =
@@ -159,8 +173,8 @@ class NvencEncoder final : public VideoEncoder {
                "nvenc-unmap-input");
     CheckNvenc(status, "nvenc-encode-picture");
 
-    pending_.push_back(Pending{input_slot, bitstream_slot, timestamp100ns,
-                               force_key_frame});
+    pending_.push_back(
+        Pending{input_slot, bitstream_slot, timestamp100ns, key_frame});
     // NV_ENC_SUCCESS means the driver took this picture; NEED_MORE_INPUT means
     // the reorder queue is still filling. Either way the drain only reads out
     // pictures the driver already reports ready.
@@ -215,6 +229,12 @@ class NvencEncoder final : public VideoEncoder {
     config_.rcParams.vbvInitialDelay = profile_.bit_rate;
     config_.encodeCodecConfig.h264Config.useBFramesAsRef =
         NV_ENC_BFRAME_REF_MODE_DISABLED;
+    // Every IDR has to be a self-contained recovery point. A relay or a Viewer
+    // joining mid-stream, or WebRTC's PLI, asks for a key frame at any time, and
+    // the caller validates that SPS, PPS and IDR arrive together. Without this
+    // only the first IDR carries the parameter sets, so the first forced key
+    // frame fails that check.
+    config_.encodeCodecConfig.h264Config.repeatSPSPPS = 1;
 
     init_params_ = {};
     init_params_.version = NV_ENC_INITIALIZE_PARAMS_VER;
@@ -344,6 +364,8 @@ class NvencEncoder final : public VideoEncoder {
   void* encoder_ = nullptr;
   NV_ENC_INITIALIZE_PARAMS init_params_{};
   NV_ENC_CONFIG config_{};
+  // Set by a successful bitrate reconfigure, consumed by the next Encode.
+  bool key_frame_after_reconfigure_ = false;
   std::vector<InputSlot> inputs_;
   std::vector<NV_ENC_CREATE_BITSTREAM_BUFFER> bitstreams_;
   std::vector<uint32_t> free_inputs_;
