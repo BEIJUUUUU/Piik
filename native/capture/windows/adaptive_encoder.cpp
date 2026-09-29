@@ -270,7 +270,13 @@ class HardwareEncoder final : public webrtc::VideoEncoder {
       const auto began = env_.clock().TimeInMilliseconds();
       const auto access_unit = encoder_->Encode(native->texture(), native->timestamp100ns(),
                                                 key_frame_pending_);
+      // The request has been handed to the encoder, so it is consumed whether or
+      // not this call produced output.
       key_frame_pending_ = false;
+      // B-frame reordering holds the first pictures back, so an empty unit means
+      // this frame is still queued, not that the encode failed. This is the same
+      // contract the VP8 path documents; the worker already skips a null output.
+      if (access_unit.bytes.empty()) return WEBRTC_VIDEO_CODEC_OK;
       webrtc::EncodedImage image;
       image.SetEncodedData(webrtc::EncodedImageBuffer::Create(
           access_unit.bytes.data(), access_unit.bytes.size()));

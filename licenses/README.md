@@ -14,6 +14,8 @@ The Windows capture adapter statically links the pinned WebRTC SDK, including
 its libvpx encoder. The App's native notices retain the SDK's collected
 third-party license texts; these dependencies do not become MIT-licensed merely
 because Piik's adapter is MIT-licensed.
+The Windows capture adapter also vendors NVIDIA's `nvEncodeAPI.h` under
+NVIDIA's MIT notice, which that header carries in full.
 Linux packages that include the native capture binary include
 `linux-system-dependencies.txt`, the full LGPL-3.0-only text for libportal, and
 the full GPL-3.0 text referenced by that license. The system shared libraries

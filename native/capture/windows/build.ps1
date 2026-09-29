@@ -33,7 +33,7 @@ $includeFlags = @('', 'third_party\abseil-cpp', 'third_party\boringssl\src\inclu
     'third_party\libyuv\include', 'third_party\libvpx\source\libvpx') | ForEach-Object {
     '/external:I "{0}"' -f (Join-Path $webrtc.Include $_).TrimEnd('\')
 }
-$compileFlags = '/nologo /c /std:c++20 /EHsc /GR /O2 /W4 /WX /MT /D_ITERATOR_DEBUG_LEVEL=0 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A00000A /external:W0 ' + ($includeFlags -join ' ')
+$compileFlags = '/nologo /c /std:c++20 /EHsc /GR /O2 /W4 /WX /MT /D_ITERATOR_DEBUG_LEVEL=0 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN /D_WIN32_WINNT=0x0A00 /DNTDDI_VERSION=0x0A00000A /external:W0 /I "' + (Join-Path $helperDirectory '..\..\third_party\nvenc') + '" ' + ($includeFlags -join ' ')
 $systemLibraries = 'ole32.lib mmdevapi.lib runtimeobject.lib user32.lib gdi32.lib dwmapi.lib shell32.lib mfplat.lib mf.lib mfuuid.lib d3d11.lib dxgi.lib dxguid.lib evr.lib oleaut32.lib windowsapp.lib winmm.lib ws2_32.lib strmiids.lib crypt32.lib dmoguids.lib iphlpapi.lib msdmo.lib secur32.lib wmcodecdspuuid.lib'
 $linkCommand = '"{0}" /nologo /libpath:"{1}"' -f $webrtc.Linker,$webrtc.RuntimeLibraries
 
@@ -44,7 +44,7 @@ function Invoke-CaptureBuild([string]$command) {
     }
 }
 
-$objects = foreach ($name in @('main', 'process_audio', 'capture_target', 'h264_encoder', 'adaptive_encoder')) {
+$objects = foreach ($name in @('main', 'process_audio', 'capture_target', 'h264_encoder', 'nvenc_encoder', 'adaptive_encoder')) {
     $source = Join-Path $helperDirectory ($name + '.cpp')
     $object = Join-Path $outputPath ($name + '.obj')
     $definitions = if ($name -eq 'adaptive_encoder') { '/DWEBRTC_WIN /DRTC_ENABLE_H265 /DNOMINMAX' } else { '' }
@@ -66,7 +66,7 @@ if ($Check) {
             $codecObjects = '"{0}"' -f (Join-Path $outputPath 'capture_target.obj')
         }
         if ($name -eq 'output_worker') {
-            $codecObjects = (@('h264_encoder', 'process_audio', 'capture_target') | ForEach-Object {
+            $codecObjects = (@('h264_encoder', 'nvenc_encoder', 'process_audio', 'capture_target') | ForEach-Object {
                 '"{0}"' -f (Join-Path $outputPath ($_ + '.obj'))
             }) -join ' '
             $codecObjects += ' "{0}"' -f $webrtc.Library

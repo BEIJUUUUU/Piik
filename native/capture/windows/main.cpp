@@ -34,6 +34,7 @@
 #include "capture_geometry.h"
 #include "process_audio.h"
 #include "h264_encoder.h"
+#include "nvenc_encoder.h"
 #ifndef PIIK_H264_FIXTURE
 #include "adaptive_encoder.h"
 #include "capture_control.h"
@@ -1348,7 +1349,15 @@ VideoEncoderSelection SelectVideoEncoder(
           auto next_device = CreateDevice(adapter);
           const auto encoders = EnumerateHardwareEncoders(adapter);
           auto selected = ActivateTransform(encoders, candidate.second, next_device.manager.Get());
-          auto next = std::make_unique<LiveEncoder>(std::move(selected), arguments.profile);
+          // Direct NVENC first: it is the only path that can emit B-frames, and
+          // B-frames are what preserve high-frequency detail on sustained
+          // motion. The Media Foundation transform cannot produce them at all.
+          std::unique_ptr<VideoEncoder> next =
+              CreateNvencEncoder(next_device.device.Get(),
+                                 next_device.context.Get(), arguments.profile);
+          if (!next) {
+            next = std::make_unique<LiveEncoder>(std::move(selected), arguments.profile);
+          }
           if (arguments.codec == "auto") {
             hardware_work = MeasureEncoderWork(next.get(), next_device.device.Get(),
                                                arguments.profile, hardware_deadline);
@@ -1573,6 +1582,14 @@ std::vector<std::unique_ptr<OutputWorker>> CreateOutputWorkers(
     AdaptiveEncoder::Factory create;
     if (hardware) {
       create = [&adapter, &device, encoder_index](const VideoProfile& selected_profile) -> std::unique_ptr<VideoEncoder> {
+        // Direct NVENC first: it is the only path that can emit B-frames, which
+        // is what keeps high-frequency detail on sustained motion. Falls back
+        // to the Media Foundation transform when no NVIDIA session exists.
+        if (auto nvenc = CreateNvencEncoder(device.device.Get(),
+                                           device.context.Get(),
+                                           selected_profile)) {
+          return nvenc;
+        }
         auto activations = EnumerateHardwareEncoders(adapter);
         auto selected = ActivateTransform(activations, encoder_index, device.manager.Get());
         return std::make_unique<LiveEncoder>(std::move(selected), selected_profile);
