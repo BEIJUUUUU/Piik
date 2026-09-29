@@ -123,12 +123,14 @@ class NvencEncoder final : public VideoEncoder {
     config_.rcParams.maxBitRate = bitrate;
     NV_ENC_RECONFIGURE_PARAMS reconfigure = {};
     reconfigure.version = NV_ENC_RECONFIGURE_PARAMS_VER;
-    // A live bitrate change resets the rate-control state and emits an IDR so
-    // the decoder restarts from a known point. Reconfiguring in place instead
-    // (resetEncoder = 0) was measured to wedge the driver: output stops and the
-    // next calls never return. This mirrors ffmpeg's nvenc reconfig_encoder.
-    reconfigure.resetEncoder = 1;
-    reconfigure.forceIDR = 1;
+    // Retune in place. WebRTC calls this on every bandwidth estimate update, so
+    // the reconfigure must not reset the encoder or force an IDR: doing that
+    // spends a whole key frame out of the CBR budget on every rate change, which
+    // crushes the frames after it into a visible clump of blocking that lasts
+    // until the buffer refills. A key frame is requested separately by the
+    // caller when the decoder actually needs one.
+    reconfigure.resetEncoder = 0;
+    reconfigure.forceIDR = 0;
     reconfigure.reInitEncodeParams = init_params_;
     reconfigure.reInitEncodeParams.version = NV_ENC_INITIALIZE_PARAMS_VER;
     reconfigure.reInitEncodeParams.encodeConfig = &config_;
@@ -136,9 +138,6 @@ class NvencEncoder final : public VideoEncoder {
         api_.functions().nvEncReconfigureEncoder(encoder_, &reconfigure);
     if (reconfigured == NV_ENC_SUCCESS) {
       profile_.bit_rate = bitrate;
-      // forceIDR makes the next submitted picture an IDR, so it has to be
-      // reported as a key frame rather than as a delta.
-      key_frame_after_reconfigure_ = true;
     }
   }
 
@@ -159,8 +158,7 @@ class NvencEncoder final : public VideoEncoder {
     free_bitstreams_.erase(free_bitstreams_.begin());
     // A successful reconfigure already forced an IDR on this picture, so it has
     // to be reported as a key frame rather than as a delta.
-    const bool key_frame = force_key_frame || key_frame_after_reconfigure_;
-    key_frame_after_reconfigure_ = false;
+    const bool key_frame = force_key_frame;
 
     // The capture pipeline hands over the selected NV12 surface on this device,
     // so a plain copy keeps the registered pool texture in the right format.
@@ -393,8 +391,6 @@ class NvencEncoder final : public VideoEncoder {
   void* encoder_ = nullptr;
   NV_ENC_INITIALIZE_PARAMS init_params_{};
   NV_ENC_CONFIG config_{};
-  // Set by a successful bitrate reconfigure, consumed by the next Encode.
-  bool key_frame_after_reconfigure_ = false;
   std::vector<InputSlot> inputs_;
   std::vector<NV_ENC_CREATE_BITSTREAM_BUFFER> bitstreams_;
   std::vector<uint32_t> free_inputs_;
