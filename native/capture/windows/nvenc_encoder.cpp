@@ -132,8 +132,9 @@ class NvencEncoder final : public VideoEncoder {
     reconfigure.reInitEncodeParams = init_params_;
     reconfigure.reInitEncodeParams.version = NV_ENC_INITIALIZE_PARAMS_VER;
     reconfigure.reInitEncodeParams.encodeConfig = &config_;
-    if (api_.functions().nvEncReconfigureEncoder(encoder_, &reconfigure) ==
-        NV_ENC_SUCCESS) {
+    const NVENCSTATUS reconfigured =
+        api_.functions().nvEncReconfigureEncoder(encoder_, &reconfigure);
+    if (reconfigured == NV_ENC_SUCCESS) {
       profile_.bit_rate = bitrate;
       // forceIDR makes the next submitted picture an IDR, so it has to be
       // reported as a key frame rather than as a delta.
@@ -197,10 +198,12 @@ class NvencEncoder final : public VideoEncoder {
 
     pending_.push_back(
         Pending{input_slot, bitstream_slot, timestamp100ns, key_frame});
-    // NV_ENC_SUCCESS means the driver took this picture; NEED_MORE_INPUT means
-    // the reorder queue is still filling. Either way the drain only reads out
-    // pictures the driver already reports ready.
-    DrainReady(deadline);
+    // NV_ENC_SUCCESS means the driver took this picture and every earlier
+    // queued one is ready now, so their output can be read out. Any other
+    // status means the reorder queue is still filling, and a lock taken in that
+    // state was measured to spin inside the driver forever even with
+    // doNotWait = 1, so nothing is drained until the driver reports readiness.
+    DrainReady(deadline, status == NV_ENC_SUCCESS);
     return TakeFirst();
   }
 
@@ -322,7 +325,11 @@ class NvencEncoder final : public VideoEncoder {
   // hang the encoder permanently (full CPU, no progress past the moment the
   // reorder backlog filled), because this is also the thread that feeds it, so
   // nothing can ever unblock the wait.
-  void DrainReady(EncoderClock::time_point deadline) {
+  // `output_ready` is only true when nvEncEncodePicture returned NV_ENC_SUCCESS,
+  // which is the driver's promise that every earlier queued picture has been
+  // produced. Nothing is locked without that promise.
+  void DrainReady(EncoderClock::time_point deadline, bool output_ready) {
+    if (!output_ready) return;
     while (!pending_.empty()) {
       RequireEncoderTime(deadline);
       const Pending work = pending_.front();
