@@ -95,6 +95,28 @@ class NvencEncoder final : public VideoEncoder {
     CreateInputPool();
   }
 
+  // Releasing the session is not optional. GeForce drivers cap how many NVENC
+  // sessions a process may hold, and a share that leaves its session, registered
+  // resources and bitstream buffers behind hands the next share a crippled
+  // encoder whose submissions fail: the picture freezes with no error reported.
+  // Failures here are ignored because a destructor must not throw.
+  ~NvencEncoder() override {
+    if (encoder_ == nullptr) return;
+    for (auto& slot : inputs_) {
+      if (slot.registered != nullptr) {
+        api_.functions().nvEncUnregisterResource(encoder_, slot.registered);
+      }
+    }
+    for (auto& buffer : bitstreams_) {
+      if (buffer.bitstreamBuffer != nullptr) {
+        api_.functions().nvEncDestroyBitstreamBuffer(encoder_,
+                                                     buffer.bitstreamBuffer);
+      }
+    }
+    api_.functions().nvEncDestroyEncoder(encoder_);
+    encoder_ = nullptr;
+  }
+
   void SetBitrate(UINT32 bitrate) override {
     if (encoder_ == nullptr || bitrate == profile_.bit_rate) return;
     config_.rcParams.averageBitRate = bitrate;
